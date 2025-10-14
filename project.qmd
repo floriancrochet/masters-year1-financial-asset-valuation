@@ -1,0 +1,1516 @@
+---
+title: "Dossier d’évaluation des actifs"
+author: "Pierre et Florian"
+format:
+  html:
+    toc: true
+    toc-title: Sommaire
+    code-fold: true
+    echo: true
+    eval: true
+    incremental: true
+  pdf:
+    toc: true
+    toc-title: Sommaire
+    code-fold: true
+    echo: true
+    eval: true
+    incremental: true
+  revealjs:
+    incremental: true
+---
+
+# Pierre QUINTIN de KERCADIO et Florian CROCHET
+
+# Importation des librairies
+
+```{r}
+library(tidyquant)
+library(tidyverse)
+library(tseries)
+library(rugarch)
+library(patchwork)
+library(corrplot)
+library(xts)
+library(PerformanceAnalytics)
+```
+
+
+# Importation des données
+
+```{r}
+tickers <- c(
+  "JUVE.MI", "SSL.MI", "XXT.SG", "CCP.L", "BVB.MU",
+  "SCP.LS", "AAB.CO", "GSRAY.IS", "AJAX.AS", "SOL-USD"
+)
+
+# Données
+data <- map(tickers, function(i) {
+  tq_get(i, from = "2023-12-01", to = "2024-11-30")
+})
+
+# Noms des actifs
+names(data) <- tickers
+
+View(data)
+```
+
+
+# Structure de chaque actif
+
+```{r}
+walk(names(data), function(i) {
+  cat("Structure de l'actif", i, ":\n")
+  str(data[[i]])
+  cat("\n")
+})
+```
+
+
+# Création d'une base commune
+
+```{r}
+# Base
+
+base <- bind_rows(data)
+
+
+# Noms des colonnes en français
+
+base <- base |>
+  rename(
+    actif = symbol,
+    date = date,
+    ouverture = open,
+    haut = high,
+    bas = low,
+    cloture = close,
+    volume = volume,
+    ajuste = adjusted
+  )
+
+
+# Structure de la base
+str(base)
+
+View(base)
+```
+
+
+# Visualisation et suppression des lignes ayant des valeurs manquantes
+
+```{r}
+# Visualisation
+
+base[which(rowSums(is.na(base)) > 0), ]
+
+
+# Suppression d'une ligne
+
+base <- base |>
+  filter(!(actif == "GSRAY.IS" & date == "2024-04-09"))
+
+data[["GSRAY.IS"]] <- data[["GSRAY.IS"]] |>
+  filter(date != "2024-04-09")
+```
+
+
+
+#-------------------- EXERCICE 1 --------------------
+
+##---------- QUESTION 1 ----------
+
+```{r}
+# Vecteur de couleurs
+
+couleurs <- c(
+  "JUVE.MI" = "red",
+  "SSL.MI" = "green",
+  "XXT.SG" = "blue",
+  "CCP.L" = "black",
+  "BVB.MU" = "cyan",
+  "SCP.LS" = "brown",
+  "AAB.CO" = "orange",
+  "GSRAY.IS" = "pink",
+  "AJAX.AS" = "grey",
+  "SOL-USD" = "purple"
+)
+```
+
+
+### 1.1 Représentation des prix de chacun des fonds en fonction du temps.
+
+```{r}
+# Un graphique représentant l'ensemble des actifs
+
+base |>
+  ggplot() +
+  aes(
+    x = date,
+    y = cloture,
+    color = actif
+  ) +
+  geom_line() +
+  scale_color_manual(
+    values = couleurs,
+    name = "Actifs"
+  ) +
+  labs(
+    title = "Évolution du cours des actifs",
+    x = "Date",
+    y = "Cours",
+    caption = "Source : Yahoo Finance",
+    subtitle = "du 01/12/23 au 30/11/24"
+  ) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      color = "black",
+      size = 20,
+      face = "bold"
+    ),
+    plot.subtitle = element_text(
+      color = "grey10",
+      size = 10
+    ),
+    plot.caption = element_text(
+      color = "grey20"
+    ),
+    axis.title.y = element_text(
+      angle = 0,
+      vjust = 0.5
+    )
+  )
+```
+
+
+```{r}
+# Un même graphique sans les actifs CCP.L, AAB.CO et SOL-USD
+
+base |>
+  filter(!actif %in% c("CCP.L", "AAB.CO", "SOL-USD")) |>
+  ggplot() +
+  aes(
+    x = date,
+    y = cloture,
+    color = actif
+  ) +
+  geom_line() +
+  scale_color_manual(
+    values = couleurs,
+    name = "Actifs"
+  ) +
+  labs(
+    title = "Évolution du cours des actifs",
+    x = "Date",
+    y = "Cours",
+    caption = "Source : Yahoo Finance",
+    subtitle = "du 01/12/23 au 30/11/24"
+  ) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      color = "black",
+      size = 20,
+      face = "bold"
+    ),
+    plot.subtitle = element_text(
+      color = "grey10",
+      size = 10
+    ),
+    plot.caption = element_text(
+      color = "grey20"
+    ),
+    axis.title.y = element_text(
+      angle = 0,
+      vjust = 0.5
+    )
+  )
+```
+
+
+```{r}
+# Un sous-graphique par titre
+
+base |>
+  ggplot() +
+  aes(
+    x = date,
+    y = cloture,
+    color = actif
+  ) +
+  geom_line() +
+  scale_color_manual(
+    values = couleurs,
+    guide = "none"
+  ) +
+  labs(
+    title = "Évolution du cours des actifs",
+    x = "Date",
+    y = "Cours",
+    caption = "Source : Yahoo Finance",
+    subtitle = "du 01/12/23 au 30/11/24"
+  ) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      color = "black",
+      size = 15,
+      face = "bold"
+    ),
+    plot.subtitle = element_text(
+      color = "grey10",
+      size = 10
+    ),
+    plot.caption = element_text(
+      color = "grey20"
+    ),
+    axis.title.y = element_text(
+      angle = 0,
+      vjust = 0.5
+    ),
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1
+    )
+  ) +
+  facet_wrap(~actif, scales = "free_y")
+```
+
+
+```{r}
+# Un graphique par titre
+
+graph_actif <- map(unique(base$actif), function(i) {
+  base |>
+    filter(actif == i) |>
+    ggplot() +
+    aes(
+      x = date,
+      y = cloture,
+      color = actif
+    ) +
+    geom_line(linewidth = 1.2) +
+    scale_color_manual(
+      values = couleurs,
+      guide = "none"
+    ) +
+    labs(
+      title = paste("Évolution du cours de l'actif", i),
+      x = "Date",
+      y = "Cours",
+      caption = "Source : Yahoo Finance",
+      subtitle = "du 01/12/23 au 30/11/24"
+    ) +
+    theme_bw() +
+    theme(
+      plot.title = element_text(
+        color = "black",
+        size = 15,
+        face = "bold"
+      ),
+      plot.subtitle = element_text(
+        color = "grey10",
+        size = 10
+      ),
+      plot.caption = element_text(
+        color = "grey20"
+      ),
+      axis.title.y = element_text(
+        angle = 0,
+        vjust = 0.5
+      )
+    )
+})
+
+walk(graph_actif, ~ print(.x))
+```
+
+
+### 1.2 Calcul des rendements de chacun des fonds en fonction du temps.
+
+```{r}
+# Calcul
+base <- base |>
+  group_by(actif) |>
+  mutate(rendement = cloture / lag(cloture) - 1) |>
+  ungroup()
+
+
+# Le rendement est nul le premier jour de la période
+base <- base |>
+  mutate(rendement = if_else(
+    date == "2023-12-01",
+    0,
+    rendement
+  ))
+
+View(base)
+```
+
+
+### 1.3 Représentation des rendements de chacun des fonds en fonction du temps.
+
+```{r}
+# Un graphique représentant l'ensemble des actifs
+
+base |>
+  ggplot() +
+  aes(
+    x = date,
+    y = rendement,
+    color = actif
+  ) +
+  geom_line() +
+  scale_color_manual(
+    values = couleurs,
+    name = "Actifs"
+  ) +
+  labs(
+    title = "Évolution du rendement des actifs",
+    x = "Date",
+    y = "Rendement",
+    caption = "Source : Yahoo Finance",
+    subtitle = "du 01/12/23 au 30/11/24"
+  ) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      color = "black",
+      size = 20,
+      face = "bold"
+    ),
+    plot.subtitle = element_text(
+      color = "grey10",
+      size = 10
+    ),
+    plot.caption = element_text(
+      color = "grey20"
+    ),
+    axis.title.y = element_text(
+      angle = 0,
+      vjust = 0.5
+    )
+  )
+
+# Warning : normal
+```
+
+
+```{r}
+# Un sous-graphique par titre
+
+base |>
+  ggplot() +
+  aes(
+    x = date,
+    y = rendement,
+    color = actif
+  ) +
+  geom_line() +
+  scale_color_manual(
+    values = couleurs,
+    guide = "none"
+  ) +
+  labs(
+    title = "Évolution du rendement des actifs",
+    x = "Date",
+    y = "Rendement",
+    caption = "Source : Yahoo Finance",
+    subtitle = "du 01/12/23 au 30/11/24"
+  ) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      color = "black",
+      size = 15,
+      face = "bold"
+    ),
+    plot.subtitle = element_text(
+      color = "grey10",
+      size = 10
+    ),
+    plot.caption = element_text(
+      color = "grey20"
+    ),
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1
+    )
+  ) +
+  facet_wrap(~actif, scales = "free_y")
+
+# Warning : normal
+```
+
+
+```{r}
+# Un graphique par titre
+
+graph_rendement <- map(unique(base$actif), function(i) {
+  base |>
+    filter(actif == i) |>
+    ggplot() +
+    aes(
+      x = date,
+      y = rendement,
+      color = actif
+    ) +
+    geom_line() +
+    scale_color_manual(
+      values = couleurs,
+      guide = "none"
+    ) +
+    labs(
+      title = paste("Évolution du rendement de l'actif", i),
+      x = "Date",
+      y = "Rendement",
+      caption = "Source : Yahoo Finance",
+      subtitle = "du 01/12/23 au 30/11/24"
+    ) +
+    theme_bw() +
+    theme(
+      plot.title = element_text(
+        color = "black",
+        size = 15,
+        face = "bold"
+      ),
+      plot.subtitle = element_text(
+        color = "grey10",
+        size = 10
+      ),
+      plot.caption = element_text(
+        color = "grey20"
+      )
+    )
+})
+
+walk(graph_rendement, ~ print(.x))
+
+
+# Warning : normal
+```
+
+
+
+##---------- QUESTION 2 ----------
+
+### 2. Quelles sont les propriétés financières de chacune des séries ?  
+
+#### - Test de stationnarité
+
+```{r}
+# Test vérifiant si les rendements sont stationnaires (c'est-à-dire sans tendance)
+
+stationnarite <- base |>
+  group_by(actif) |>
+  summarise(
+    p_value_adf = adf.test(rendement)$p.value
+  )
+
+stationnarite
+
+# Warning : la p-value est très petite
+```
+Au seuil de 5 %, l'hypothèse nulle est rejetée, ce qui suggère que la série des rendements de chaque actif est stationnaire.
+
+
+#### - Graphique d'autocorrélation
+
+```{r}
+# Graphique de l'autocorrélation des rendements
+# Évaluation de l'influence des rendements passés sur les rendements futurs
+
+base |>
+  group_by(actif) |>
+  group_walk(~ {
+    acf(
+      .x$rendement,
+      main = paste("ACF pour", .y)
+    )
+  })
+```
+Lorsque les barres d'autocorrélation dépassent les bandes de confiance, cela indique une autocorrélation significative à ce lag, révélant une dépendance temporelle entre les rendements.
+
+
+#### - Test de normalité
+
+```{r}
+# Test vérifiant si les rendements suivent une distribution normale
+
+normalite <- base |>
+  group_by(actif) |>
+  summarise(
+    p_value_shapiro = shapiro.test(rendement)$p.value
+  )
+
+normalite
+```
+La p-value du test est inférieure à 1 % pour les rendements de chaque actif.
+Au seuil de 1 %, l'hypothèse nulle est donc rejetée, ce qui signifie que les rendements ne suivent pas une distribution normale.
+
+
+#### - Volatilité conditionnelle
+
+```{r}
+# Analyse des périodes de forte et faible volatilité
+
+# Spécification d'un modèle GARCH
+spec <- ugarchspec(
+  variance.model = list(model = "sGARCH"),
+  mean.model = list(armaOrder = c(0, 0))
+)
+
+# Calcul de la volatilité pour chaque actif
+volatilite <- base |>
+  group_by(actif) |>
+  group_map(~ {
+    list(
+      # Nom de l'actif
+      actif = .y,
+      # Ajustement du modèle GARCH sur les rendements de chaque actif
+      fit = ugarchfit(spec = spec, data = .x$rendement)
+    )
+  })
+
+# Affichage des résultats de la volatilité conditionnelle
+volatilite
+```
+
+
+
+##---------- QUESTION 3 ----------
+
+### 3. Y a-t-il des retours à la moyenne ? Pouvez-vous identifier des événements d'actualité qui pourraient expliquer des valeurs inhabituelles ? 
+#### - Calcul des moyennes
+
+```{r}
+# Moyenne du cours de clôture des actifs
+
+moyenne_cours <- base |>
+  group_by(actif) |>
+  summarise(moyenne = mean(cloture))
+
+moyenne_cours
+
+
+# Moyenne des rendements des actifs
+
+moyenne_rendement <- base |>
+  group_by(actif) |>
+  summarise(moyenne = mean(rendement))
+
+moyenne_rendement
+```
+
+
+
+#### - Graphique avec la moyenne des cours
+
+```{r}
+# Un sous-graphique par titre
+
+base |>
+  ggplot() +
+  aes(
+    x = date,
+    y = cloture,
+    color = actif
+  ) +
+  geom_line() +
+  geom_hline(
+    data = moyenne_cours,
+    aes(yintercept = moyenne)
+  ) +
+  scale_color_manual(
+    values = couleurs,
+    guide = "none"
+  ) +
+  labs(
+    title = "Évolution du cours des actifs par rapport à leur moyenne",
+    x = "Date",
+    y = "Cours",
+    caption = "Source : Yahoo Finance",
+    subtitle = "du 01/12/23 au 30/11/24"
+  ) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      color = "black",
+      size = 13,
+      face = "bold"
+    ),
+    plot.subtitle = element_text(
+      color = "grey10",
+      size = 10
+    ),
+    plot.caption = element_text(
+      color = "grey20"
+    ),
+    axis.title.y = element_text(
+      angle = 0,
+      vjust = 0.5
+    ),
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1
+    )
+  ) +
+  facet_wrap(~actif, scales = "free_y")
+```
+
+
+```{r}
+# Un graphique par titre
+
+graph_actif_moyenne <- map(unique(base$actif), function(i) {
+  base |>
+    filter(actif == i) |>
+    ggplot() +
+    aes(
+      x = date,
+      y = cloture,
+      color = actif
+    ) +
+    geom_line(linewidth = 1.2) +
+    geom_hline(
+      data = moyenne_cours,
+      aes(yintercept = moyenne[actif == i])
+    ) +
+    scale_color_manual(
+      values = couleurs,
+      guide = "none"
+    ) +
+    labs(
+      title = paste("Évolution du cours de l'actif", i, "par rapport à sa moyenne"),
+      x = "Date",
+      y = "Cours",
+      caption = "Source : Yahoo Finance",
+      subtitle = "du 01/12/23 au 30/11/24"
+    ) +
+    theme_bw() +
+    theme(
+      plot.title = element_text(
+        color = "black",
+        size = 12,
+        face = "bold"
+      ),
+      plot.subtitle = element_text(
+        color = "grey10",
+        size = 10
+      ),
+      plot.caption = element_text(
+        color = "grey20"
+      ),
+      axis.title.y = element_text(
+        angle = 0,
+        vjust = 0.5
+      )
+    )
+})
+
+walk(graph_actif_moyenne, ~ print(.x))
+```
+
+
+#### - Graphique avec la moyenne des rendements
+
+```{r}
+# Un sous-graphique par titre
+
+base |>
+  ggplot() +
+  aes(
+    x = date,
+    y = rendement,
+    color = actif
+  ) +
+  geom_line() +
+  geom_hline(
+    data = moyenne_rendement,
+    aes(yintercept = moyenne)
+  ) +
+  scale_color_manual(
+    values = couleurs,
+    guide = "none"
+  ) +
+  labs(
+    title = "Évolution du rendement des actifs par rapport à leur moyenne",
+    x = "Date",
+    y = "Rendement",
+    caption = "Source : Yahoo Finance",
+    subtitle = "du 01/12/23 au 30/11/24"
+  ) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      color = "black",
+      size = 13,
+      face = "bold"
+    ),
+    plot.subtitle = element_text(
+      color = "grey10",
+      size = 10
+    ),
+    plot.caption = element_text(
+      color = "grey20"
+    ),
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1
+    )
+  ) +
+  facet_wrap(~actif, scales = "free_y")
+
+# Warning : normal
+```
+
+
+```{r}
+# Un graphique par titre
+
+graph_rendement_moyenne <- map(unique(base$actif), function(i) {
+  base |>
+    filter(actif == i) |>
+    ggplot() +
+    aes(
+      x = date,
+      y = rendement,
+      color = actif
+    ) +
+    geom_line() +
+    geom_hline(
+      data = moyenne_rendement,
+      aes(yintercept = moyenne[actif == i])
+    ) +
+    scale_color_manual(
+      values = couleurs,
+      guide = "none"
+    ) +
+    labs(
+      title = paste("Évolution du rendement de l'actif", i, "par rapport à sa moyenne"),
+      x = "Date",
+      y = "Rendement",
+      caption = "Source : Yahoo Finance",
+      subtitle = "du 01/12/23 au 30/11/24"
+    ) +
+    theme_bw() +
+    theme(
+      plot.title = element_text(
+        color = "black",
+        size = 12,
+        face = "bold"
+      ),
+      plot.subtitle = element_text(
+        color = "grey10",
+        size = 10
+      ),
+      plot.caption = element_text(
+        color = "grey20"
+      )
+    )
+})
+
+walk(graph_rendement_moyenne, ~ print(.x))
+
+
+# Warning : normal
+```
+
+  
+
+##---------- QUESTION 4 ----------
+
+### 4. Représentation des boites à moustaches associées à la distribution de chaque fonds.
+
+```{r}
+# Un graphique par titre
+
+graph_boxplot <- map(unique(base$actif), function(i) {
+  base |>
+    filter(actif == i) |>
+    ggplot() +
+    aes(
+      x = "",
+      y = rendement,
+      fill = actif
+    ) +
+    geom_boxplot() +
+    scale_fill_manual(
+      values = couleurs,
+      guide = "none"
+    ) +
+    labs(
+      title = i,
+      x = "",
+      y = "",
+    ) +
+    theme_bw() +
+    theme(
+      plot.title = element_text(
+        hjust = 0.5,
+        size = 12,
+        face = "bold"
+      )
+    )
+})
+
+# Groupes de 3 boites à moustaches
+groupe_boxplot <- map(seq(1, length(graph_boxplot), by = 5), function(i) {
+  wrap_plots(graph_boxplot[i:min(i + 4, length(graph_boxplot))],
+    ncol = 5
+  )
+})
+
+# Titre
+titre_boxplot <- ggplot() +
+  ggtitle("Boites à moustaches du rendement des actifs") +
+  theme_void() +
+  theme(plot.title = element_text(hjust = 0.5, size = 15, face = "bold"))
+
+# Titre et groupes
+walk(seq(1, length(groupe_boxplot)), function(i) {
+  wrap_plots(
+    titre_boxplot, # Add the title at the top
+    groupe_boxplot[[i]], # Use [[i]] to extract the i-th element
+    nrow = 2,
+    heights = c(0.1, 1)
+  ) |>
+    print()
+})
+
+
+# Warning : normal
+```
+
+
+
+##---------- QUESTION 5 ----------
+
+### 5.1 Calcul des statistiques descriptives univariées (moyenne, variance, écart-type, asymétrie, kurtosis) pour chaque fond. 
+
+```{r}
+stats_rendements <- base |>
+  group_by(actif) |>
+  summarise(
+    moyenne = mean(rendement),
+    variance = var(rendement),
+    ecart_type = sd(rendement),
+    asymetrie = skewness(rendement),
+    kurtosis = kurtosis(rendement)
+  )
+
+View(stats_rendements)
+```
+
+```{r}
+# Autres statistiques
+
+autres_stats_rendements <- base |>
+  group_by(actif) |>
+  summarise(
+    minimum = min(rendement),
+    Q1 = quantile(rendement, 0.25),
+    mediane = median(rendement),
+    moyenne = mean(rendement),
+    Q3 = quantile(rendement, 0.75),
+    maximum = max(rendement),
+    outliers_bas = sum(rendement < (Q1 - 1.5 * (Q3 - Q1))),
+    outliers_haut = sum(rendement > (Q3 + 1.5 * (Q3 - Q1)))
+  )
+```
+
+
+###  5.2 Normalité des distributions des séries
+
+```{r}
+# Histogrammes des rendements de chacun des fonds en fonction du temps.
+
+# Un sous-graphique par titre
+
+base |>
+  ggplot() +
+  aes(
+    x = rendement,
+    fill = actif
+  ) +
+  geom_histogram(
+    binwidth = 0.005,
+    alpha = 0.7,
+    position = "identity"
+  ) +
+  scale_fill_manual(
+    values = couleurs,
+    guide = "none"
+  ) +
+  labs(
+    title = "Histogrammes des rendements des actifs",
+    x = "Rendements",
+    y = "Fréquence",
+    caption = "Source : Yahoo Finance",
+    subtitle = "du 01/12/23 au 30/11/24"
+  ) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      color = "black",
+      size = 20,
+      face = "bold"
+    ),
+    plot.subtitle = element_text(
+      color = "grey10",
+      size = 10
+    ),
+    plot.caption = element_text(
+      color = "grey20"
+    )
+  ) +
+  facet_wrap(~actif, scales = "free_y")
+
+# Warning : normal
+```
+
+
+
+##---------- QUESTION 6 ----------
+
+### 6. En utilisant un taux mensuel sans risque égal à 0,5 % par mois (ce qui correspond à un taux annuel composé en continu de 6,2 %), calcul du ratio de Sharpe pour chaque actif. 
+
+```{r}
+# Taux mensuel sans risque de 0,5 %
+
+taux_sans_risque <- 0.005
+
+
+# Ratio de Sharpe pour chaque actif
+
+ratio_sharpe <- base |>
+  group_by(actif) |>
+  summarise(
+    rendement_moyen = mean(rendement), # rendement mensuel moyen de l'actif
+    volatilite = sd(rendement), # volatilité des rendements de l'actif (écart-type)
+    sharpe = (rendement_moyen - taux_sans_risque) / volatilite # ratio de Sharpe
+  )
+
+ratio_sharpe
+```
+
+```{r}
+# Autre méthode
+
+R <- tapply(base$rendement, base$actif, mean) # rendement mensuel moyen
+O <- tapply(base$rendement, base$actif, sd) # volatilité des rendements (écart-type)
+r <- 0.005 # taux mensuel sans risque
+
+S <- (R - r) / O # ratio de Sharpe
+S
+```
+
+
+##---------- QUESTION 7 ----------
+
+### 7. Matrice de variances-covariances des rendements de vos neuf actifs.
+
+```{r}
+# Matrice de variances-covariances des rendements
+
+matrice_variances_covariances <- base |>
+  select(date, actif, rendement) |>
+  pivot_wider(names_from = actif, values_from = rendement) |>
+  select(-date) |>
+  cov(
+    use = "complete.obs",
+    method = "spearman"
+    # Méthode robuste à la non-normalité
+    # des rendements de chaque actif
+  )
+
+View(matrice_variances_covariances)
+```
+
+```{r}
+# Matrice de variances-covariances des rendements des neuf premiers actifs
+
+View(matrice_variances_covariances[-10, -10])
+```
+
+
+
+#---------- QUESTION 8 ----------
+
+### 8.1 Matrice de corrélation des rendements de vos neuf actifs
+
+```{r}
+# Matrice de corrélation des rendements
+
+matrice_correlation <- base |>
+  select(date, actif, rendement) |>
+  pivot_wider(names_from = actif, values_from = rendement) |>
+  select(-date) |>
+  cor(
+    use = "complete.obs",
+    method = "spearman"
+    # Méthode robuste à la non-normalité
+    # des rendements de chaque actif
+  )
+
+View(matrice_correlation)
+```
+
+```{r}
+# Matrice de corrélation des rendements des neuf premiers actifs
+
+View(matrice_correlation[-10, -10])
+```
+
+
+### 8.2  Matrice de corrélation à l'aide de la fonction corrplot
+
+```{r}
+# Matrice
+
+corrplot(matrice_correlation[-10, -10],
+  method = "number",
+  type = "upper",
+  col = colorRampPalette(c("blue", "grey", "red"))(100),
+  addCoef.col = "black",
+  tl.col = "black",
+  tl.srt = 45,
+  number.cex = 0.8
+)
+```
+
+
+
+##---------- QUESTION 10 ----------
+
+### 10. A partir de 7 mesures de performances ajustées au risque, identification pour chacune d’elle, du titre le plus rentable.
+
+#### - Conversion d'un sous-ensemble de données au format xts
+
+```{r}
+# Colonnes sélectionnées : date, actif et rendements
+
+rendements_data <- base |>
+  select(date, actif, rendement) |>
+  pivot_wider(names_from = actif, values_from = rendement) |>
+  arrange(date)
+
+# View(rendements_data)
+```
+
+```{r}
+## Conversion au format xts
+
+rendements_xts <- rendements_data |>
+  select(-date) |> # la colonne date est exclue
+  xts(order.by = as.Date(rendements_data$date)) # la colonne date est utilisée comme index
+
+# View(rendements_xts)
+```
+
+```{r}
+# Actifs sans SOL-USD
+
+actifs_sans_sol <- setdiff(tickers, "SOL-USD")
+
+actifs_sans_sol
+```
+
+
+#### - Ratio de Sharpe
+
+```{r}
+# Ratio de Sharpe pour chaque actif avec
+# un taux sans risque mensuel de 0,5 %
+
+ratio_sharpe2 <- ratio_sharpe |>
+  select(actif, sharpe)
+```
+
+```{r}
+# Autre méthode
+
+ratio_sharpe <- map_dfr(tickers, ~ {
+  tibble(
+    actif = .x,
+    sharpe = as.numeric(SharpeRatio(
+      R = na.omit(rendements_xts[, .x]),
+      Rf = taux_sans_risque,
+      FUN = "StdDev"
+    ))
+  )
+})
+```
+
+
+#### - Alpha de Jensen
+
+```{r}
+alpha_jensen <- map_dfr(tickers, ~ {
+  tibble(
+    actif = .x,
+    jensen = CAPM.jensenAlpha(
+      Ra = na.omit(rendements_xts[, .x]),
+      Rb = na.omit(rendements_xts[, "SOL-USD"]),
+      Rf = taux_sans_risque
+    )
+  )
+})
+```
+
+
+#### - Ratio de Sortino
+
+```{r}
+ratio_sortino <- map_dfr(tickers, ~ {
+  tibble(
+    actif = .x,
+    sortino = as.numeric(SortinoRatio(
+      R = na.omit(rendements_xts[, .x]),
+      MAR = taux_sans_risque
+    ))
+  )
+})
+```
+
+
+#### - Ratio de Treynor
+
+```{r}
+ratio_treynor <- map_dfr(tickers, ~ {
+  tibble(
+    actif = .x,
+    treynor = TreynorRatio(
+      Ra = na.omit(rendements_xts[, .x]),
+      Rb = rendements_xts[, "SOL-USD"],
+      Rf = taux_sans_risque
+    )
+  )
+})
+```
+
+
+#### - Ratio d’information
+
+```{r}
+ratio_info <- map_dfr(tickers, ~ {
+  tibble(
+    actif = .x,
+    information = InformationRatio(
+      Ra = na.omit(rendements_xts[, .x]),
+      Rb = rendements_xts[, "SOL-USD"],
+      scale = 12
+    )
+  )
+})
+```
+
+
+#### - Coefficient de variation
+
+```{r}
+coefficient_variation <- map_dfr(tickers, ~ {
+  # rendement mensuel moyen
+  rendement_moyen <- mean(na.omit(rendements_xts[, .x]))
+
+  # volatilité des rendements (écart-type)
+  volatilite <- sd(na.omit(rendements_xts[, .x]))
+
+  # tibble
+  tibble(
+    actif = .x,
+    coeff_variation = volatilite / rendement_moyen
+  )
+})
+```
+
+
+#### - Ratio de Roy
+
+```{r}
+# Taux de rendement de réserve mensuel
+
+t_reserve <- 0
+
+
+# Ratio de Roy pour chaque actif
+
+ratio_roy <- map_dfr(tickers, ~ {
+  # rendement mensuel moyen
+  rendement_moyen <- mean(na.omit(rendements_xts[, .x]))
+
+  # volatilité des rendements (écart-type)
+  volatilite <- sd(na.omit(rendements_xts[, .x]))
+
+  # tibble
+  tibble(
+    actif = .x,
+    roy = (rendement_moyen - t_reserve) / volatilite
+  )
+})
+```
+
+
+#### - Résumé
+
+```{r}
+# Tibbles
+tibbles <- list(
+  ratio_sharpe, alpha_jensen, ratio_sortino, ratio_treynor,
+  ratio_info, coefficient_variation, ratio_roy
+)
+
+# Jointure totale sur la colonne actif
+resume <- purrr::reduce(tibbles, full_join, by = "actif")
+
+# Résultat
+print(resume)
+```
+
+
+
+
+#-------------------- EXERCICE 2 --------------------
+
+##---------- QUESTION 1 ----------
+
+### 1. Utilisez les 9 premiers actifs précédents. 
+
+#### 1.a Calcul du rendement du portefeuille équipondéré composé des 9 fonds, puis déduction de son écart-type. 
+
+```{r}
+# Suppression de la colonne "SOL_USD" dans rendements_data
+
+rendements_data_sans_sol <- rendements_data |>
+  na.omit() |>
+  select(-`SOL-USD`)
+```
+
+```{r}
+# Calcul des rendements du portefeuille en utilisant baserendement2_sans_SOL_USD
+
+rendements_portefeuille <- Return.portfolio(rendements_data_sans_sol)
+
+names(rendements_portefeuille) <- "PF"
+```
+
+```{r}
+# Ajout des rendements du portefeuille à la base existante
+
+base_rendements <- bind_cols(rendements_data_sans_sol, rendements_portefeuille)
+```
+
+```{r}
+# Calcul des statistiques descriptives (moyenne, variance, écart-type, asymétrie, kurtosis) du portefeuille.
+
+stats_portefeuilles <- tibble(
+  actif = "PF",
+  moyenne = mean(rendements_portefeuille),
+  variance = as.numeric(var(rendements_portefeuille)),
+  ecart_type = sd(rendements_portefeuille),
+  asymetrie = skewness(rendements_portefeuille),
+  kurtosis = kurtosis(rendements_portefeuille)
+)
+
+view(stats_portefeuilles)
+```
+
+```{r}
+# Ajout des statistiques du portefeuille à la base existante
+
+stats_rendements2 <- stats_rendements |> 
+  bind_rows(stats_portefeuilles) |>
+  filter(actif != "SOL-USD")
+
+View(stats_rendements2)
+```
+
+
+
+
+#### 1.c. Dans un plan moyenne-variance, représentation des 10 séries.
+
+```{r}
+# Vecteur de couleurs
+
+couleurs2 <- couleurs
+names(couleurs2)[names(couleurs2) == "SOL-USD"] <- "PF"
+couleurs2["PF"] <- "purple"
+
+couleurs2
+```
+
+
+```{r}
+# Un graphique représentant l'ensemble des actifs
+
+graph_moy_var <- stats_rendements2 |>
+  ggplot(aes(
+    x = ecart_type,
+    y = moyenne,
+    color = actif,
+    label = actif
+  )) +
+  geom_point(size = 4) +
+  geom_text(
+    vjust = -0.9,
+    hjust = 0.6,
+    size = 3,
+    color = "black"
+  ) +
+  scale_color_manual(
+    values = couleurs2,
+    name = "Titres",
+  ) +
+  labs(
+    title = "Équilibre entre risque et rendement",
+    x = "Volatilité",
+    y = "Rendement attendu"
+  ) +
+  scale_y_continuous(labels = scales::percent) +
+  scale_x_continuous(labels = scales::percent) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(
+      color = "black",
+      size = 14,
+      face = "bold"
+    )
+  )
+
+graph_moy_var
+```
+
+
+
+##---------- QUESTION 2 ----------
+
+```{r}
+# Importation et préparation des données
+library(tidyquant)
+library(data.table)
+library(xts)
+
+# Téléchargement des données
+tickers <- c("JUVE.MI", "SSL.MI", "XXT.SG")
+data <- lapply(tickers, function(ticker) {
+  df <- tq_get(ticker, from = "2023-12-01", to = "2024-11-30")
+  df <- df %>%
+    mutate(rendement = adjusted / lag(adjusted) - 1) # Calcul des rendements
+  xts(df$rendement, order.by = as.Date(df$date)) # Conversion en xts
+})
+names(data) <- tickers
+
+# Création d'une table commune
+data_table <- data.table(
+  JUVE_MIrdmt = data[["JUVE.MI"]],
+  SSL_MIrdmt = data[["SSL.MI"]],
+  XXT_SGrdmt = data[["XXT.SG"]]
+)
+names(data_table) <- c("x", "y", "z")
+data_table <- na.omit(data_table) # Suppression des NA
+
+# Calcul des statistiques
+Ex <- mean(data_table$x, na.rm = TRUE)
+Ey <- mean(data_table$y, na.rm = TRUE)
+Ez <- mean(data_table$z, na.rm = TRUE)
+
+Sdx <- sd(data_table$x, na.rm = TRUE)
+Sdy <- sd(data_table$y, na.rm = TRUE)
+Sdz <- sd(data_table$z, na.rm = TRUE)
+
+Covxy <- cov(data_table$x, data_table$y, use = "complete.obs")
+Covxz <- cov(data_table$x, data_table$z, use = "complete.obs")
+Covyz <- cov(data_table$y, data_table$z, use = "complete.obs")
+
+# Création des poids du portefeuille
+xpoids <- seq(from = 0, to = 1, length.out = 1000)
+Actifs3bis <- data.table(wx = rep(xpoids, each = length(xpoids)),
+                         wy = rep(xpoids, length(xpoids)))
+Actifs3bis[, wz := 1 - wx - wy]
+
+# Calcul des métriques du portefeuille
+Actifs3bis[, ':=' (
+  Ep = wx * Ex + wy * Ey + wz * Ez,
+  Sdp = sqrt(wx^2 * Sdx^2 +
+               wy^2 * Sdy^2 +
+               wz^2 * Sdz^2 +
+               2 * wx * wy * Covxy +
+               2 * wx * wz * Covxz +
+               2 * wy * wz * Covyz)
+)]
+Actifs3bis <- Actifs3bis[wx >= 0 & wy >= 0 & wz >= 0]
+```
+
+
+```{r}
+# Graphique de la frontière d'efficience
+library(ggplot2)
+plot <- ggplot() +
+  geom_point(data = Actifs3bis, aes(x = Sdp, y = Ep, color = wx - wz)) +
+  geom_point(data = data.table(Sd = c(Sdx, Sdy, Sdz), E = c(Ex, Ey, Ez)),
+             aes(x = Sd, y = E), color = "black", size = 3, shape = 18) +
+  theme_light() +
+  labs(
+    title = "Frontière d'efficience du portefeuille",
+    subtitle = "Composé des actifs JUVE.MI, SSL.MI, XXT.SG",
+    x = "Volatilité", y = "Espérance de rentabilité",
+    caption = "Source : Yahoo Finance"
+  ) +
+  scale_y_continuous(label = scales::percent) +
+  scale_x_continuous(label = scales::percent) +
+  scale_color_gradientn(colors = c("yellow", "cyan", "blue"),
+                        name = expression(omega[x] - omega[z]), labels = scales::percent) +
+  theme(
+    plot.title = element_text(color = "black", size = 12, face = "bold"),
+    plot.subtitle = element_text(color = "grey3", size = 9),
+    plot.caption = element_text(color = "azure4", face = "plain")
+  )
+print(plot)
+```
+
+
+```{r}
+# Portefeuille de variance minimale
+getMinVariancePortfolio <- function(mu, covMat, assetSymbols) {
+  U <- rep(1, length(mu))
+  O <- solve(covMat)
+  w <- O %*% U / as.numeric(t(U) %*% O %*% U)
+  Risk <- sqrt(t(w) %*% covMat %*% w)
+  ExpReturn <- t(w) %*% mu
+  Weights <- `names<-`(round(w, 5), assetSymbols)
+  list(Weights = t(Weights),
+       ExpReturn = round(as.numeric(ExpReturn), 5),
+       Risk = round(as.numeric(Risk), 5))
+}
+Pf_VM <- getMinVariancePortfolio(
+  mu = c(Ex, Ey, Ez),
+  covMat = cov(data_table, use = "complete.obs"),
+  assetSymbols = tickers
+)
+print(Pf_VM)
+```
+
+
+```{r}
+# Portefeuille tangent
+r.free <- 0.025
+cov.mat <- cov(data_table, use = "complete.obs")
+E <- c(Ex, Ey, Ez)
+cov.mat.inv <- solve(cov.mat)
+w.t <- cov.mat.inv %*% (E - r.free)
+w.t <- as.vector(w.t / sum(w.t))
+names(w.t) <- tickers
+E.t <- crossprod(w.t, E)
+Sd.t <- sqrt(t(w.t) %*% cov.mat %*% w.t)
+PTangent <- list(
+  Weights = w.t,
+  ExpReturn = as.vector(E.t),
+  Risk = as.vector(Sd.t)
+)
+print(PTangent)
+```
+
+
+
