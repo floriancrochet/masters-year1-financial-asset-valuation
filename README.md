@@ -1,6 +1,8 @@
 # Financial Asset Evaluation  
 *A quantitative analysis of football club equities and cryptocurrency performance.*
 
+[**Report (PDF – online)**](https://drive.google.com/file/d/1PhT8aecdhZV8dT5PVNbNAhvdVucygpIk/view?usp=drive_link)
+
 ---
 
 ## 📘 Overview
